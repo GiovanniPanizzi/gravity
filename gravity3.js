@@ -234,13 +234,13 @@ class Entity {
     // stats updates
     updateStats(){
         if(this.jumping < this.jumpingTiming){
-            jumping++;
+            this.jumping++;
         }
         if(this.traveling < this.travelingTiming){
-            traveling++;
+            this.traveling++;
         }
         if(this.throwing < this.throwingTiming){
-            throwing++;
+            this.throwing++;
         }
     }
 
