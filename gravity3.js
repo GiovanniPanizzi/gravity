@@ -96,21 +96,36 @@ class Entity {
     speed = 1;
     jumpC = 6;
 
-    travelingTiming = 20;
-    jumpingTiming = 20;
-    throwingTiming = 20;
+    travelingTiming = 50;
+    jumpingTiming = 50;
+    throwingTiming = 50;
+    damagingTiming = 50;
+    attackingTiming = 50;
+
+    tolleranceSpeed = 10;
+
+    rocksCount = 0;
+    gravitaniumCount = 0;
+    metalCount = 0;
     
-    traveling = 20;
-    jumping = 10;
-    throwing = 10;
+    traveling = 50;
+    jumping = 50;
+    throwing = 50;
+    damaging = 50;
+    attacking = 50;
     
     hitboxR = 20;
     hitboxX = 200;
     hitboxY = 200;
+
     lifePoints = 10;
+
             
-    constructor(){
-        this.traveling = 20;
+    constructor(x, y, width, height){
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
     }
 
     //entity updates
@@ -180,9 +195,17 @@ class Entity {
 
             //overlap correction
 
-            if (dist != planet.r) {
+            if (dist != planet.r  && this.jumping > 10) {
                 this.x = planet.x - Math.cos(this.angle + Math.PI / 2) * planet.r;
                 this.y = planet.y - Math.sin(this.angle + Math.PI / 2) * planet.r;
+            }
+
+            if (planet.deadly){
+                if(this.damaging == this.damagingTiming){
+                    this.lifePoints -= 3;
+                    console.log(this.lifePoints);
+                    this.damaging = 0;
+                }
             }
         }
 
@@ -210,22 +233,19 @@ class Entity {
         this.y += this.vy;
     }
 
-    //check portal collision
+    //check rock collision
 
     checkRockCollision(){
-        if(this.hit >= 20){
-            for(let i=0; i < currentGalaxy.numRocks; i++){
+        if(this.damaging == this.damagingTiming){
+            for(let i = 0; i < currentGalaxy.numRocks; i++){
                 let dx = currentGalaxy.rocks[i].x - this.x;
                 let dy = currentGalaxy.rocks[i].y - this.y;
-                let dist = Math.sqrt(dx * dx + dy * dy);
-                if(dist <= currentGalaxy.rocks[i].r + player.width){
-                    this.lifePoints --;
-                    this.hit = 0;
+                if((dx * dx < this.height * this.height && dy * dy < this.height * this.height) && (currentGalaxy.rocks[i].vx * currentGalaxy.rocks[i].vx + currentGalaxy.rocks[i].vy * currentGalaxy.rocks[i].vy) > this.tolleranceSpeed){
+                    this.lifePoints--;
+                    console.log(this.lifePoints);
+                    this.damaging = 0;
                 }
             }
-        }
-        else{
-            this.hit ++;
         }
     }
 
@@ -241,6 +261,12 @@ class Entity {
         }
         if(this.throwing < this.throwingTiming){
             this.throwing++;
+        }
+        if(this.damaging < this.damagingTiming){
+            this.damaging++;
+        }
+        if(this.attacking < this.attackingTiming){
+            this.attackingTiming++;
         }
     }
 
@@ -264,6 +290,7 @@ class Entity {
 
     mine(){
         for(let i = currentGalaxy.numRocks - 1; i >= 0; i--){
+
             let rock = currentGalaxy.rocks[i];
             let Xdist = this.hitboxX - rock.x;
             let Ydist = this.hitboxY - rock.y;
@@ -309,10 +336,11 @@ class Entity {
         if(this.throwing == this.throwingTiming){
             if (this.metalCount > 0){
                 this.metalCount --;
-                let rock = { x: this.x + Math.sin(this.angle) * 50, y: this.y - Math.cos(this.angle) * 50, r: 10, vx: Math.cos(this.angle) * 10 * this.right + this.vx, vy: Math.sin(this.angle) * 10 * this.right + this.vy, ax: 0, ay: 0, groundPlanet: -1, material: "metal" };
+                let rock = { x: this.x + Math.sin(this.angle) * 30, y: this.y - Math.cos(this.angle) * 30, r: 10, vx: Math.cos(this.angle) * 10 * this.right + this.vx, vy: Math.sin(this.angle) * 10 * this.right + this.vy, ax: 0, ay: 0, groundPlanet: -1, material: "metal" };
                 currentGalaxy.rocks.push(rock);
                 currentGalaxy.numRocks++;
                 this.throwing = 0;
+                this.damaging -= 15;
             }
         }
     }
@@ -660,7 +688,6 @@ const levels = [
 
         //portals
         [
-            { x: 100, y: 270, r: 20, index: 1, xIndex: 700, yIndex: 400 },
             { x: 750, y: 100, r: 20, index: 2, xIndex: 500, yIndex: 500 },
             { x: 1200, y: 200, r: 20, index: 3, xIndex: 650, yIndex: 480 },
         ],
@@ -674,7 +701,7 @@ const levels = [
         //entities
 
         [
-            new Entity()
+            new Entity(700, 700, 20, 40)
         ]
     ),
 
@@ -761,7 +788,7 @@ const levels = [
 
 
 //player generate 
-let player = new Player;
+let player = new Player(700, 700, 20, 40);
 
 //current level
 let currentGalaxy = levels[0];
@@ -783,8 +810,6 @@ function draw(){
 
 //keyBoard
 function Keyboard(){
-
-    player.updateStats();
 
     if(arrowLeft){
         player.right = -1;
@@ -832,9 +857,10 @@ function fpsCount(){
 
 function phisics(){
     player.gravityUpdate(currentGalaxy);
-
+    player.updateStats();
     for(let i = 0; i < currentGalaxy.numEntities; i++){
         currentGalaxy.entities[i].gravityUpdate(currentGalaxy);
+        currentGalaxy.entities[i].updateStats();
     }
 
     currentGalaxy.updatePlanetsMotion();
@@ -842,6 +868,7 @@ function phisics(){
 
     for(let i = 0; i < currentGalaxy.numEntities; i++){
         currentGalaxy.entities[i].motionUpdate(currentGalaxy);
+        currentGalaxy.entities[i].checkRockCollision(currentGalaxy);
     }
 
     player.hitboxUpdate();
