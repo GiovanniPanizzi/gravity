@@ -75,278 +75,6 @@ document.addEventListener('keyup', function(event) {
     }
 });
 
-//player
-
-class Player {
-
-    right = 1;
-    x = 700;
-    y = 700;
-    width = 20;    
-    height = 40;
-    vx = 0;
-    vy = 0;
-    ax = 0;
-    ay = 0;
-    onGround = false;
-    angle = 0;
-    groundPlanet = -1;
-    speed = 1;
-    jumpC = 6;
-    traveling = 20;
-    jumping = 10;
-    hitboxR = 20;
-    hitboxX = 200;
-    hitboxY = 200;
-    rocksCount = 0;
-    gravitaniumCount = 0;
-    metalCount = 0;
-    throwing = 10;
-    lifePoints = 10;
-    hit = 10;
-            
-    constructor(){
-        this.traveling = 20;
-    }
-
-    //player updates
-
-    //update hitbox
-    hitboxUpdate(){
-        this.hitboxX = this.x + (Math.cos(this.angle) * 15) * this.right + Math.sin(this.angle) * 5;
-        this.hitboxY = this.y + (Math.sin(this.angle) * 15) * this.right - Math.cos(this.angle) * 5;
-    }
-
-    gravityUpdate(currentGalaxy){
-        
-        //restart stats
-        this.ax = 0;
-        this.ay = 0;
-        this.groundPlanet = -1;
-        this.onGround = false;
-        for(let i=0; i < currentGalaxy.numPlanets; i++){
-            let xDistance = currentGalaxy.planets[i].x - this.x;
-            let yDistance = currentGalaxy.planets[i].y - this.y;
-            let distSquared = xDistance * xDistance + yDistance * yDistance;
-            let dist = Math.sqrt(distSquared);
-
-            //verify if player is on planet i
-            if(dist < currentGalaxy.planets[i].r + 5){
-                this.groundPlanet = i;
-                this.onGround = true;
-                break;
-            }
-
-            //update g
-            else{
-                let g = (G * currentGalaxy.planets[i].mass) / distSquared; 
-                this.ax += g * (xDistance / dist); 
-                this.ay += g * (yDistance / dist);
-            }
-        }
-    }
-
-    motionUpdate(currentGalaxy){
-
-        //verify if player is in space
-        if(this.groundPlanet == -1){ 
-            this.vx += this.ax;
-            this.vy += this.ay;
-            this.angle = Math.atan2(this.ay, this.ax) - Math.PI / 2 ;
-
-        }
-
-        //if player is on planet
-        else{
-            let planet = currentGalaxy.planets[this.groundPlanet];
-            let xDistance = planet.x - this.x;
-            let yDistance = planet.y - this.y;
-            let dist = Math.sqrt(xDistance * xDistance + yDistance * yDistance);
-
-            let relVx = this.vx - planet.vx;
-            let relVy = this.vy - planet.vy;
-
-            relVx *= planet.friction;
-            relVy *= planet.friction;
-
-            this.vx = relVx + planet.vx;
-            this.vy = relVy + planet.vy;
-
-            this.angle = (Math.atan2(yDistance, xDistance) - Math.PI / 2);
-
-            //overlap correction
-
-            if (dist != planet.r  && this.jumping > 20) {
-                this.x = planet.x - Math.cos(this.angle + Math.PI / 2) * planet.r;
-                this.y = planet.y - Math.sin(this.angle + Math.PI / 2) * planet.r;
-            }
-        }
-
-        //generals
-
-         //velocity correction
-
-         if(this.vx > maxVelocity){
-            this.vx = maxVelocity;
-        }
-
-        if(this.vy > maxVelocity){
-            this.vy = maxVelocity;
-        }
-
-        if(this.vx < -maxVelocity){
-            this.vx = -maxVelocity;
-        }
-
-        if(this.vy < -maxVelocity){
-            this.vy = -maxVelocity;
-        }
-
-        this.x += this.vx;
-        this.y += this.vy;
-    }
-
-    //check portal collision
-
-    checkPortalCollision() {
-
-        if(this.traveling >= 20){
-            for(let i=0; i < currentGalaxy.numPortals; i++){
-                let dx = currentGalaxy.portals[i].x - this.x;
-                let dy = currentGalaxy.portals[i].y - this.y;
-                let dist = Math.sqrt(dx * dx + dy * dy);
-                if(dist <= currentGalaxy.portals[i].r + player.width){
-                    this.x = currentGalaxy.portals[i].xIndex;
-                    this.y = currentGalaxy.portals[i].yIndex;
-                    currentGalaxy = levels[currentGalaxy.portals[i].index];
-                    this.traveling = 0;
-                    console.log(currentGalaxy);
-                }
-            }
-        }
-        else{
-            this.traveling ++;
-        }
-    }
-
-    checkRockCollision(){
-        if(this.hit >= 20){
-            for(let i=0; i < currentGalaxy.numRocks; i++){
-                let dx = currentGalaxy.rocks[i].x - this.x;
-                let dy = currentGalaxy.rocks[i].y - this.y;
-                let dist = Math.sqrt(dx * dx + dy * dy);
-                if(dist <= currentGalaxy.rocks[i].r + player.width){
-                    this.lifePoints --;
-                    this.hit = 0;
-                }
-            }
-        }
-        else{
-            this.hit ++;
-        }
-    }
-
-    //keyboard controls
-
-    moveLeft() {
-        this.vx -= Math.cos(this.angle) * this.speed;
-        this.vy -= Math.sin(this.angle) * this.speed;
-    }
-    
-    moveRight() {
-        this.vx += Math.cos(this.angle) * this.speed;
-        this.vy += Math.sin(this.angle) * this.speed;
-    }
-    
-    jump() {
-        if(this.jumping == 30){
-            this.vx += Math.cos(this.angle - Math.PI / 2) * this.jumpC;
-            this.vy += Math.sin(this.angle - Math.PI / 2) * this.jumpC;
-            this.jumping = 0;
-        }
-    }
-
-    mine(){
-        for(let i = currentGalaxy.numRocks - 1; i >= 0; i--){
-            let rock = currentGalaxy.rocks[i];
-            let Xdist = this.hitboxX - rock.x;
-            let Ydist = this.hitboxY - rock.y;
-
-            let dist = Math.sqrt((Xdist * Xdist) + (Ydist * Ydist));
-
-            if(dist <= rock.r + this.hitboxR){
-
-                switch(rock.material){
-                    
-                    case "rock": this.rocksCount++;
-                    break;
-
-                    case "metal": this.metalCount++;
-                    break;
-
-                    case "gravitanium": this.gravitaniumCount++;
-                    break;
-                }
-
-                if(this.rocksCount < 10 && this.metalCount < 10 && this.gravitaniumCount < 10){
-                    currentGalaxy.rocks.splice(i, 1);
-                    currentGalaxy.numRocks --;
-                }
-                else{
-                    switch(rock.material){
-                    
-                        case "rock": this.rocksCount--;
-                        break;
-    
-                        case "metal": this.metalCount--;
-                        break;
-    
-                        case "gravitanium": this.gravitaniumCount--;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    throw(){
-        if(this.throwing == 100){
-            if (this.metalCount > 0){
-                this.metalCount --;
-                let rock = { x: this.x + Math.sin(this.angle) * 50, y: this.y - Math.cos(this.angle) * 50, r: 10, vx: Math.cos(this.angle) * 10 * this.right + this.vx, vy: Math.sin(this.angle) * 10 * this.right + this.vy, ax: 0, ay: 0, groundPlanet: -1, material: "metal" };
-                currentGalaxy.rocks.push(rock);
-                currentGalaxy.numRocks++;
-                this.throwing = 0;
-            }
-        }
-    }
-
-    //draw player
-
-    draw(){
-        ctx.beginPath();
-        ctx.fillStyle = "green";
-        ctx.save();
-        ctx.translate(700, 400);
-        ctx.rotate(this.angle);
-        ctx.fillRect(-this.width / 2 * scale, -this.height * scale, this.width * scale, this.height * scale);
-        ctx.restore();
-        ctx.closePath();
-
-        //draw hitbox
-
-        ctx.beginPath();
-        ctx.save();
-
-        ctx.arc(700 + (Math.cos(this.angle) * 15) * this.right * scale + Math.sin(this.angle) * 5 * scale, 400 + (Math.sin(this.angle) * 15) * this.right * scale - Math.cos(this.angle) * 5 * scale, this.hitboxR * scale, 0, Math.PI * 2);
-        ctx.fillStyle = "red";
-        ctx.fill();
-        ctx.restore();
-        ctx.closePath();
-
-    }
-}
-
 //entity class
 
 class Entity {
@@ -476,6 +204,115 @@ class Entity {
 
     //check portal collision
 
+    checkRockCollision(){
+        if(this.hit >= 20){
+            for(let i=0; i < currentGalaxy.numRocks; i++){
+                let dx = currentGalaxy.rocks[i].x - this.x;
+                let dy = currentGalaxy.rocks[i].y - this.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                if(dist <= currentGalaxy.rocks[i].r + player.width){
+                    this.lifePoints --;
+                    this.hit = 0;
+                }
+            }
+        }
+        else{
+            this.hit ++;
+        }
+    }
+
+    // controls
+
+    moveLeft() {
+        this.vx -= Math.cos(this.angle) * this.speed;
+        this.vy -= Math.sin(this.angle) * this.speed;
+    }
+    
+    moveRight() {
+        this.vx += Math.cos(this.angle) * this.speed;
+        this.vy += Math.sin(this.angle) * this.speed;
+    }
+    
+    jump() {
+        if(this.jumping == 30){
+            this.vx += Math.cos(this.angle - Math.PI / 2) * this.jumpC;
+            this.vy += Math.sin(this.angle - Math.PI / 2) * this.jumpC;
+            this.jumping = 0;
+        }
+    }
+
+    mine(){
+        for(let i = currentGalaxy.numRocks - 1; i >= 0; i--){
+            let rock = currentGalaxy.rocks[i];
+            let Xdist = this.hitboxX - rock.x;
+            let Ydist = this.hitboxY - rock.y;
+
+            let dist = Math.sqrt((Xdist * Xdist) + (Ydist * Ydist));
+
+            if(dist <= rock.r + this.hitboxR){
+
+                switch(rock.material){
+                    
+                    case "rock": this.rocksCount++;
+                    break;
+
+                    case "metal": this.metalCount++;
+                    break;
+
+                    case "gravitanium": this.gravitaniumCount++;
+                    break;
+                }
+
+                if(this.rocksCount < 10 && this.metalCount < 10 && this.gravitaniumCount < 10){
+                    currentGalaxy.rocks.splice(i, 1);
+                    currentGalaxy.numRocks --;
+                }
+                else{
+                    switch(rock.material){
+                    
+                        case "rock": this.rocksCount--;
+                        break;
+    
+                        case "metal": this.metalCount--;
+                        break;
+    
+                        case "gravitanium": this.gravitaniumCount--;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    throw(){
+        if(this.throwing == 100){
+            if (this.metalCount > 0){
+                this.metalCount --;
+                let rock = { x: this.x + Math.sin(this.angle) * 50, y: this.y - Math.cos(this.angle) * 50, r: 10, vx: Math.cos(this.angle) * 10 * this.right + this.vx, vy: Math.sin(this.angle) * 10 * this.right + this.vy, ax: 0, ay: 0, groundPlanet: -1, material: "metal" };
+                currentGalaxy.rocks.push(rock);
+                currentGalaxy.numRocks++;
+                this.throwing = 0;
+            }
+        }
+    }
+
+    //draw entity
+
+    draw(){
+        ctx.beginPath();
+        ctx.fillStyle = "red";
+        ctx.save();
+        ctx.translate(this.x - player.x + 700, this.y - player.y + 400);
+        ctx.rotate(this.angle);
+        ctx.fillRect(-this.width, -this.height, this.width * scale, this.height * scale);
+        ctx.restore();
+        ctx.closePath();
+
+    }
+}
+
+class Player extends Entity {
+
     checkPortalCollision() {
 
         if(this.traveling >= 20){
@@ -496,16 +333,25 @@ class Entity {
             this.traveling ++;
         }
     }
-
-    //draw entity
-
+    
     draw(){
         ctx.beginPath();
-        ctx.fillStyle = "red";
+        ctx.fillStyle = "green";
         ctx.save();
-        ctx.translate(this.x - player.x + 700, this.y - player.y + 400);
+        ctx.translate(700, 400);
         ctx.rotate(this.angle);
-        ctx.fillRect(-this.width, -this.height, this.width * scale, this.height * scale);
+        ctx.fillRect(-this.width / 2 * scale, -this.height * scale, this.width * scale, this.height * scale);
+        ctx.restore();
+        ctx.closePath();
+
+        //draw hitbox
+
+        ctx.beginPath();
+        ctx.save();
+
+        ctx.arc(700 + (Math.cos(this.angle) * 15) * this.right * scale + Math.sin(this.angle) * 5 * scale, 400 + (Math.sin(this.angle) * 15) * this.right * scale - Math.cos(this.angle) * 5 * scale, this.hitboxR * scale, 0, Math.PI * 2);
+        ctx.fillStyle = "red";
+        ctx.fill();
         ctx.restore();
         ctx.closePath();
 
