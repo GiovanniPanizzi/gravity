@@ -93,8 +93,8 @@ class Player {
     groundPlanet = -1;
     speed = 1;
     jumpC = 6;
-    traveling = 20;
-    jumping = 10;
+    traveling = 0;
+    jumping = 0;
     hitboxR = 20;
     hitboxX = 200;
     hitboxY = 200;
