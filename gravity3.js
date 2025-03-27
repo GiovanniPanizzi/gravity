@@ -84,21 +84,29 @@ class Entity {
     y = -500;
     width = 20;    
     height = 40;
+    
     vx = 0;
     vy = 0;
     ax = 0;
     ay = 0;
+    
     onGround = false;
     angle = 0;
     groundPlanet = -1;
     speed = 1;
     jumpC = 6;
+
+    travelingTiming = 20;
+    jumpingTiming = 20;
+    throwingTiming = 20;
+    
     traveling = 20;
     jumping = 10;
+    throwing = 10;
+    
     hitboxR = 20;
     hitboxX = 200;
     hitboxY = 200;
-    throwing = 10;
     lifePoints = 10;
             
     constructor(){
@@ -223,6 +231,19 @@ class Entity {
 
     // controls
 
+    // stats updates
+    updateStats(){
+        if(this.jumping < this.jumpingTiming){
+            jumping++;
+        }
+        if(this.traveling < this.travelingTiming){
+            traveling++;
+        }
+        if(this.throwing < this.throwingTiming){
+            throwing++;
+        }
+    }
+
     moveLeft() {
         this.vx -= Math.cos(this.angle) * this.speed;
         this.vy -= Math.sin(this.angle) * this.speed;
@@ -234,7 +255,7 @@ class Entity {
     }
     
     jump() {
-        if(this.jumping == 30){
+        if(this.jumping == this.jumpingTiming){
             this.vx += Math.cos(this.angle - Math.PI / 2) * this.jumpC;
             this.vy += Math.sin(this.angle - Math.PI / 2) * this.jumpC;
             this.jumping = 0;
@@ -285,7 +306,7 @@ class Entity {
     }
 
     throw(){
-        if(this.throwing == 100){
+        if(this.throwing == this.throwingTiming){
             if (this.metalCount > 0){
                 this.metalCount --;
                 let rock = { x: this.x + Math.sin(this.angle) * 50, y: this.y - Math.cos(this.angle) * 50, r: 10, vx: Math.cos(this.angle) * 10 * this.right + this.vx, vy: Math.sin(this.angle) * 10 * this.right + this.vy, ax: 0, ay: 0, groundPlanet: -1, material: "metal" };
@@ -762,13 +783,8 @@ function draw(){
 
 //keyBoard
 function Keyboard(){
-    if(player.jumping != 30){
-        player.jumping ++;
-    }
 
-    if(player.throwing != 100){
-        player.throwing ++;
-    }
+    player.updateStats();
 
     if(arrowLeft){
         player.right = -1;
