@@ -80,10 +80,6 @@ document.addEventListener('keyup', function(event) {
 class Entity {
 
     right = 1;
-    x = 700;
-    y = -500;
-    width = 20;    
-    height = 40;
     
     vx = 0;
     vy = 0;
@@ -104,9 +100,13 @@ class Entity {
 
     tolleranceSpeed = 10;
 
-    rocksCount = 0;
-    gravitaniumCount = 0;
-    metalCount = 0;
+    rocksCount = 1;
+    gravitaniumCount = 1;
+    metalCount = 1;
+
+    rocksLimit = 10;
+    metalLimit = 10;
+    gravitaniumLimit = 10;
     
     traveling = 50;
     jumping = 50;
@@ -117,15 +117,13 @@ class Entity {
     hitboxR = 20;
     hitboxX = 200;
     hitboxY = 200;
-
-    lifePoints = 10;
-
             
-    constructor(x, y, width, height){
+    constructor(x, y, width, height, lifePoints){
         this.x = x;
         this.y = y;
         this.width = width;
         this.height = height;
+        this.lifePoints = lifePoints;
     }
 
     //entity updates
@@ -249,8 +247,6 @@ class Entity {
         }
     }
 
-    // controls
-
     // stats updates
     updateStats(){
         if(this.jumping < this.jumpingTiming){
@@ -269,6 +265,8 @@ class Entity {
             this.attackingTiming++;
         }
     }
+
+    // controls
 
     moveLeft() {
         this.vx -= Math.cos(this.angle) * this.speed;
@@ -311,10 +309,11 @@ class Entity {
                     break;
                 }
 
-                if(this.rocksCount < 10 && this.metalCount < 10 && this.gravitaniumCount < 10){
+                if(this.rocksCount < this.rocksLimit && this.metalCount < this.metalLimit && this.gravitaniumCount < this.gravitaniumLimit){
                     currentGalaxy.rocks.splice(i, 1);
                     currentGalaxy.numRocks --;
                 }
+
                 else{
                     switch(rock.material){
                     
@@ -340,7 +339,7 @@ class Entity {
                 currentGalaxy.rocks.push(rock);
                 currentGalaxy.numRocks++;
                 this.throwing = 0;
-                this.damaging -= 15;
+                this.damaging -= 10;
             }
         }
     }
@@ -364,7 +363,7 @@ class Player extends Entity {
 
     checkPortalCollision() {
 
-        if(this.traveling >= 20){
+        if(this.traveling == this.travelingTiming){
             for(let i=0; i < currentGalaxy.numPortals; i++){
                 let dx = currentGalaxy.portals[i].x - this.x;
                 let dy = currentGalaxy.portals[i].y - this.y;
@@ -392,18 +391,6 @@ class Player extends Entity {
         ctx.fillRect(-this.width / 2 * scale, -this.height * scale, this.width * scale, this.height * scale);
         ctx.restore();
         ctx.closePath();
-
-        //draw hitbox
-
-        ctx.beginPath();
-        ctx.save();
-
-        ctx.arc(700 + (Math.cos(this.angle) * 15) * this.right * scale + Math.sin(this.angle) * 5 * scale, 400 + (Math.sin(this.angle) * 15) * this.right * scale - Math.cos(this.angle) * 5 * scale, this.hitboxR * scale, 0, Math.PI * 2);
-        ctx.fillStyle = "red";
-        ctx.fill();
-        ctx.restore();
-        ctx.closePath();
-
     }
 }
 
@@ -581,6 +568,35 @@ class Galaxy {
             this.rocksCounter ++;
     }
 
+    //kill npc
+
+    kill(){
+        for(let i = this.numEntities - 1; i >= 0; i--){
+            if(this.entities[i].lifePoints <= 0){
+                let rock;
+                for(let j = 0; j < this.entities[i].rocksCount; j++){
+                    rock = { x: this.entities[i].x, y: this.entities[i].y, r: 10, vx: 0, vy:0, ax: 0, ay: 0, groundPlanet: -1, material: "rock"};
+                    this.rocks.push(rock);
+                    this.numRocks++;
+                }
+
+                for(let j = 0; j < this.entities[i].metalCount; j++){
+                    rock = { x: this.entities[i].x, y: this.entities[i].y, r: 10, vx: 0, vy:0, ax: 0, ay: 0, groundPlanet: -1, material: "metal"};
+                    this.rocks.push(rock);
+                    this.numRocks++;
+                }
+                
+                for(let j = 0; j < this.entities[i].gravitaniumCount; j++){
+                    rock = { x: this.entities[i].x, y: this.entities[i].y, r: 10, vx: 0, vy:0, ax: 0, ay: 0, groundPlanet: -1, material: "gravitanium"};
+                    this.rocks.push(rock);
+                    this.numRocks++;
+                }
+                this.entities.splice(i, 1);
+                this.numEntities--;
+            }
+        }
+    }
+
     //draw planets
 
     drawPlanets(player){
@@ -701,7 +717,9 @@ const levels = [
         //entities
 
         [
-            new Entity(700, 700, 20, 40)
+            new Entity(700, 700, 20, 40, 1),
+            new Entity(300, 200, 20, 40, 1),
+            new Entity(400, -200, 20, 40, 1),
         ]
     ),
 
@@ -781,14 +799,12 @@ const levels = [
         [],
 
         //entities
-        
         []
     )
 ];
 
-
 //player generate 
-let player = new Player(700, 700, 20, 40);
+let player = new Player(700, 700, 20, 40, 20);
 
 //current level
 let currentGalaxy = levels[0];
@@ -850,7 +866,6 @@ function fpsCount(){
         lastTime = now;
         console.log("FPS:", fps); 
     }
-
 }
 
 //phisics
@@ -879,13 +894,19 @@ function phisics(){
     currentGalaxy.createNewRocks();
 }
 
-
-
 //game loop
 
 let frameC = 0;
 
 function gameLoop(){
+
+    frameC++;
+
+    if (frameC % 10 === 0) {
+        currentGalaxy.kill();
+    }
+
+    fpsCount();
 
     phisics();
 
