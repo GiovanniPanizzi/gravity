@@ -1,12 +1,28 @@
 
 let idCounter = 0;
 let maxVelocity = 15;
-scale = 0.5;
-G = 15;
+scale = 1;
+G = 10;
 let isEditing = true;
 
 const c = document.getElementById("gameCanvas");
 const ctx = c.getContext("2d");
+
+const densities = {
+    "rock": 1,
+    "lava": 1,
+    "metal": 1.5,
+    "gravitanium": 2,
+    "ice": 0.9
+};
+
+const frictions = {
+    "rock": 0.85,
+    "lava": 0.2,
+    "metal": 0.90,
+    "gravitanium": 0.85,
+    "ice": 0.99,
+};
 
 //event listener
 class EventListener {
@@ -119,7 +135,9 @@ class EventListener {
             switch (event.button) {
                 case 0:
                     this.mouseLeft = true;
-                    edit.takeObject(this);
+                    if(isEditing){
+                        edit.mouseClick();
+                    }
                     break;
                 case 1:
                     this.mouseMiddle = true;
@@ -136,7 +154,9 @@ class EventListener {
             switch (event.button) {
                 case 0:
                     this.mouseLeft = false;
-                    edit.leaveObject();
+                    if(isEditing){
+                        edit.mouseLeave();
+                    }
                     break;
                 case 1:
                     this.mouseMiddle = false;
@@ -192,8 +212,7 @@ class Object{
         this.angle = 0;
         this.groundPlanet = -1;
         this.right = 1;
-
-        this.edited = false;
+        this.shape = "rectangle";
     }
 
     //collision
@@ -295,6 +314,7 @@ class Sphere extends Object{
         super(x, y, vx, vy, gravity, mass, galaxy);
         this.r = r;
         this.material = material;
+        this.shape = "circle";
     }
 
     draw(player){
@@ -336,8 +356,15 @@ class Planet extends Sphere {
     constructor(x, y, vx, vy, gravity, mass, r, material, galaxy, friction){
         super(x, y, vx, vy, gravity, mass, r, material, galaxy);
 
-        this.friction = friction;
-        this.numBlocks = r * r * Math.PI;
+        console.log(Math.log2(this.r));
+
+        this.mass = densities[this.material] * this.r * this.r / 20;
+        this.friction = frictions[this.material];
+    }
+
+    //updateMass
+    updateMass(){
+        this.mass = densities[this.material] * this.r * this.r / 20;
     }
 }
 
@@ -422,6 +449,7 @@ class Entity extends Object {
         super(x, y, vx, vy, gravity, mass, galaxy);
 
         this.type = "entity";
+        this.shape = "entity";
 
         this.height = height;
         this.width = width;
@@ -442,6 +470,7 @@ class Entity extends Object {
     handleOverlap(){
 
         let planet = identificator.getObjectFromId(this.groundPlanet);
+        console.log(planet.mass);
         let xDistance = planet.x - this.x;
         let yDistance = planet.y - this.y;
         let dist = Math.sqrt((xDistance * xDistance) + (yDistance * yDistance));
@@ -682,6 +711,11 @@ class Tool extends Object {
 
         this.type = "tool";
 
+        this.width = 10;
+        this.height = 20;
+
+        this.shape = "entity";
+
         this.entity = null;
     }
 
@@ -848,6 +882,12 @@ class GravitySwitch extends Tool {
 //galaxy
 class Galaxy {
     constructor(planets, rocks, portals, entities, tools) {
+
+        //id
+        idCounter++;
+        this.id = idCounter;
+        identificator.createId(this);
+
         this.planets = planets;
         this.rocks = rocks;
         this.portals = portals;
@@ -1115,496 +1155,657 @@ class Identificator {
 //edit
 class Edit {
     constructor(){
-        this.editing = -1;
-        this.sliding = false;
+        this.editing = 1;
         this.zooming = false;
-        this.rubber = false;
-        this.moving = true;
-        this.changingParametres = false;
-        this.rChanging = false;
-        this.changingObject = -1;
+    }
+
+    mouseClick(){
+
+        let mouseX = eventListener.mouseX;
+        let mouseY = eventListener.mouseY;
+
+        if (pointInObject(mouseX, mouseY, startPlayingTool)) {
+            startPlayingTool.mouseClick();
+            return;
+        }
+        
+        if (pointInObject(mouseX, mouseY, zoomingBar)) {
+            this.zooming = true;
+            return;
+        }
+        
+        if (pointInObject(mouseX, mouseY, movingTool)) {
+            this.editing = 1;
+            return;
+        }
+        
+        if (pointInObject(mouseX, mouseY, rubberTool)) {
+            this.editing = 2;
+            return;
+        }
+        
+        if (pointInObject(mouseX, mouseY, addingTool)) {
+            this.editing = 3;
+            return;
+        }
+
+        if (pointInObject(mouseX, mouseY, objectEditorTool)) {
+            this.editing = 4;
+            return;
+        }
+
+        switch(this.editing){
+            case 1:
+                movingTool.takeObject();
+                return;
+            case 2:
+                rubberTool.cancelObject();
+                return;
+            case 3:
+                addingTool.takeObject();
+                return;
+            case 4: 
+                objectEditorTool.editObject();
+                return;
+        }
+    }
+
+    mouseLeave(){
+        this.zooming = false;
+        switch(this.editing){
+            case 1:
+                movingTool.leaveObject();
+                return;
+            case 2:
+                rubberTool.leaveMouse();
+                return;
+            case 3:
+                addingTool.leaveObject();
+                return;
+            case 4:
+                objectEditorTool.leaveMouse();
+        }
+    }
+
+    update(){
+
+        if(this.zooming){
+            zoomingBar.update();
+            scale = zoomingBar.parameter;
+            return;
+        }
+
+        switch(this.editing){
+            case 1:
+                movingTool.update();
+                return;
+            case 2:
+                rubberTool.update();
+                return;
+            case 3:
+                addingTool.update();
+                return;
+            case 4:
+                objectEditorTool.update();
+                return;
+        }
+    }
+
+    drawEditingTools(){
+        movingTool.draw();
+        rubberTool.draw();
+        addingTool.draw();
+        zoomingBar.draw();
+        objectEditorTool.draw();
+        startPlayingTool.draw();
+    }
+}
+
+class MovingTool{
+
+    constructor(x, y, width, height){
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.mouseStartX = 0;
+        this.mouseStartY = 0;
+        this.editing = -1;
+        this.playerX = player.x;
+        this.playerStartY = player.y;
+        this.shape = "rectangle";
+    }
+
+    //change with pointInObject function
+    takeObject(){
+        this.mouseStartX = eventListener.mouseX;
+        this.mouseStartY = eventListener.mouseY;
+        this.playerStartX = player.x;
+        this.playerStartY = player.y;
+
+        for(let i = 0; i < currentLevel.numPlanets; i++){
+            const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+            const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+
+            if(pointInObject(mouseWorldX, mouseWorldY, currentLevel.planets[i])){
+                this.editing = currentLevel.planets[i].id;
+                return;
+            }
+        }
+
+        for(let i = 0; i < currentLevel.numPortals; i++){
+            const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+            const mouseWorldY = eventListener.mouseY / scale + player.y - c.height/ (scale * 2) ;
+
+            if(pointInObject(mouseWorldX, mouseWorldY, currentLevel.portals[i])){
+                this.editing = currentLevel.portals[i].id;
+                return;
+            }
+        }
+
+        for(let i = 0; i < currentLevel.numRocks; i++){
+            const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+            const mouseWorldY = eventListener.mouseY / scale + player.y - c.height/ (scale * 2) ;
+
+            if(pointInObject(mouseWorldX, mouseWorldY, currentLevel.rocks[i])){
+                this.editing = currentLevel.rocks[i].id;
+                return;
+            }
+        }
+
+        for(let i = 0; i < currentLevel.numTools; i++){
+            const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+            const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+
+            if(pointInObject(mouseWorldX, mouseWorldY, currentLevel.tools[i])){
+                this.editing = currentLevel.tools[i].id;
+                return;
+            }
+        }
+
+        for(let i = 0; i < currentLevel.numEntities; i++){
+            if(currentLevel.entities[i] != player){
+                const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+                const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+
+                if(pointInObject(mouseWorldX, mouseWorldY, currentLevel.entities[i])){
+                    this.editing = currentLevel.entities[i].id;
+                    return;
+                }
+            }
+        }
+
+        this.editing = 0;
+    }
+
+    leaveObject(){
+        this.editing = -1;
+    }
+
+    update(){
+        if(this.editing > 0){
+            identificator.getObjectFromId(this.editing).x = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+            identificator.getObjectFromId(this.editing).y = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+        }
+        if(this.editing == 0){
+            player.x = this.playerStartX - eventListener.mouseX / scale + this.mouseStartX / scale;
+            player.y = this.playerStartY - eventListener.mouseY / scale + this.mouseStartY / scale;
+        }
+    }
+
+    draw(){
+        ctx.beginPath();
+        ctx.fillStyle = "black";
+        ctx.fillRect(this.x, this.y, this.width , this.height);
+        ctx.restore();
+        ctx.closePath();
+    }
+}
+
+class RubberTool{
+    constructor(x, y, width, height){
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.editing = -1;
         this.mouseStartX = 0;
         this.mouseStartY = 0;
         this.playerStartX = 0;
         this.playerStartY = 0;
-        this.zoomToolX = c.width / 2;
-        this.zoomToolY = c.height - 40;
-
-        this.majorBarX = c.width - 200;
-        this.majorBarY = 50;
+        this.shape = "rectangle";
     }
 
-    startEditing(){
-        currentLevel.editing = true;
+    cancelObject(){
+
+        this.mouseStartX = eventListener.mouseX;
+        this.mouseStartY = eventListener.mouseY;
+        this.playerStartX = player.x;
+        this.playerStartY = player.y;
+
+        for(let i = 0; i < currentLevel.numPlanets; i++){
+            const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+            const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+
+            if(pointInObject(mouseWorldX, mouseWorldY, currentLevel.planets[i])){
+                currentLevel.removeObject(currentLevel.planets[i]);
+                return;
+            }
+        }
+
+        for(let i = 0; i < currentLevel.numPortals; i++){
+            const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+            const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+
+            if(pointInObject(mouseWorldX, mouseWorldY, currentLevel.portals[i])){
+                currentLevel.removeObject(currentLevel.portals[i]);
+                return;
+            }
+        }
+
+        for(let i = 0; i < currentLevel.numTools; i++){
+            if(currentLevel.tools[i] != player){
+                const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+                const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+
+                let dist = Math.sqrt(
+                    (mouseWorldX - currentLevel.tools[i].x) ** 2 +
+                    (mouseWorldY - currentLevel.tools[i].y) ** 2
+                );
+                if(dist <= 50){
+                    currentLevel.removeObject(currentLevel.tools[i]);
+                    return;
+                }
+            }
+        }
+
+        for(let i = 0; i < currentLevel.numEntities; i++){
+            if(currentLevel.entities[i] != player){
+                const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+                const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+
+                let dist = Math.sqrt(
+                    (mouseWorldX - currentLevel.entities[i].x) ** 2 +
+                    (mouseWorldY - currentLevel.entities[i].y) ** 2
+                );
+                if(dist <= 50){
+                    currentLevel.removeObject(currentLevel.entities[i]);
+                    return;
+                }
+            }
+        }
+        this.editing = 0;
     }
 
-    takeObject(eventListener){
+    leaveMouse(){
+        this.editing = -1;
+    }
 
-        this.majorBarX + 50, c.height - 100, 100 , 50
-        if((eventListener.mouseX > this.majorBarX + 50) && (eventListener.mouseX < this.majorBarX + 150) && (eventListener.mouseY > c.height - 100) && (eventListener.mouseY < c.height - 50)){
-            player.x = fakePlayer.x;
-            player.y = fakePlayer.y;
-            currentLevel.removeObject(fakePlayer);
-            currentLevel.addObject(player);
-            currentLevel.editing = false;
-            scale = 1;
-            isEditing = false;
-            return;
+    update(){
+        if(this.editing == 0){
+            player.x = this.playerStartX - eventListener.mouseX / scale + this.mouseStartX / scale;
+            player.y = this.playerStartY - eventListener.mouseY / scale + this.mouseStartY / scale;
         }
+    }
 
-        if((eventListener.mouseY > this.majorBarY) && (eventListener.mouseY < this.majorBarY + 50)){
+    draw(){
+        ctx.beginPath();
+        ctx.fillStyle = "white";
+        ctx.fillRect(this.x, this.y, this.width , this.height);
+        ctx.restore();
+        ctx.closePath();
+    }
+}
 
-            //move
-            if((eventListener.mouseX > this.majorBarX - 100) && (eventListener.mouseX < this.majorBarX - 50)){
-                this.rubber = false;
-                this.moving = true;
-                this.adding = false;
-                this.changingParametres = false;
-                this.editing = -4;
-                return;
-            }
+class AddingTool{
+    constructor(x, y, width, height){
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.editing = -1;
+        this.playerStartX = player.x;
+        this.playerStartY = player.y;
+        this.mouseStartX = 0;
+        this.mouseStartY = 0;
+        this.shape = "rectangle";
+    }
 
-            //change parameters
-            if((eventListener.mouseX > this.majorBarX - 50) && (eventListener.mouseX < this.majorBarX)){
-                this.rubber = false;
-                this.moving = false;
-                this.adding = false;
-                this.changingParametres = true;
+    takeObject(){
+        this.mouseStartX = eventListener.mouseX;
+        this.mouseStartY = eventListener.mouseY;
+        this.playerStartX = player.x;
+        this.playerStartY = player.y;
 
-                this.editing = -4;
-                return;
-            }
-
-            //addObjects
-            if((eventListener.mouseX > this.majorBarX) && (eventListener.mouseX < this.majorBarX + 50)){
-                this.rubber = false;
-                this.moving = false;
-                this.adding = true;
-                this.changingParametres = false;
-                this.editing = -4;
-                return;
-            }
-
-            //rubber
-            if((eventListener.mouseX > this.majorBarX + 50) && (eventListener.mouseX < this.majorBarX + 100)){
-                this.rubber = true;
-                this.moving = false;
-                this.adding = false;
-                this.changingParametres = false;
-                this.editing = -3;
-                return;
-            }
-        }
-
-        if((eventListener.mouseX > this.zoomToolX - 60) && (eventListener.mouseX < this.zoomToolX + 60) && (eventListener.mouseY > this.zoomToolY - 15) && (eventListener.mouseY < this.zoomToolY + 75)){
-
-            this.editing = -2;
-            this.zooming = true;
-            return;
-        }
-
-        if(this.moving){
-            for(let i = 0; i < currentLevel.numPlanets; i++){
-                const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
-    
-                let dist = Math.sqrt(
-                    (mouseWorldX - currentLevel.planets[i].x) ** 2 +
-                    (mouseWorldY - currentLevel.planets[i].y) ** 2
-                );
-                if(dist <= currentLevel.planets[i].r){
-                    currentLevel.planets[i].edited = true;
-                    this.editing = currentLevel.planets[i].id;
-                    return;
-                }
-            }
-
-            for(let i = 0; i < currentLevel.numPortals; i++){
-                const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                const mouseWorldY = eventListener.mouseY / scale + player.y - c.height/ (scale * 2) ;
-    
-                let dist = Math.sqrt(
-                    (mouseWorldX - currentLevel.portals[i].x) ** 2 +
-                    (mouseWorldY - currentLevel.portals[i].y) ** 2
-                );
-                if(dist <= currentLevel.portals[i].r){
-                    currentLevel.portals[i].edited = true;
-                    this.editing = currentLevel.portals[i].id;
-                    return;
-                }
-            }
-    
-            for(let i = 0; i < currentLevel.numTools; i++){
-                if(currentLevel.tools[i] != player){
-                    const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                    const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
-    
-                    let dist = Math.sqrt(
-                        (mouseWorldX - currentLevel.tools[i].x) ** 2 +
-                        (mouseWorldY - currentLevel.tools[i].y) ** 2
-                    );
-                    if(dist <= 20){
-                        currentLevel.tools[i].edited = true;
-                        this.editing = currentLevel.tools[i].id;
-                        return;
-                    }
-                }
-            }
-    
-            for(let i = 0; i < currentLevel.numEntities; i++){
-                if(currentLevel.entities[i] != player){
-                    const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                    const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
-    
-                    let dist = Math.sqrt(
-                        (mouseWorldX - currentLevel.entities[i].x) ** 2 +
-                        (mouseWorldY - currentLevel.entities[i].y) ** 2
-                    );
-                    if(dist <= 20){
-                        currentLevel.entities[i].edited = true;
-                        this.editing = currentLevel.entities[i].id;
-                        return;
-                    }
-                }
-            }
-        }
-
-        if(this.rubber){
-            for(let i = 0; i < currentLevel.numPlanets; i++){
-                const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
-    
-                let dist = Math.sqrt(
-                    (mouseWorldX - currentLevel.planets[i].x) ** 2 +
-                    (mouseWorldY - currentLevel.planets[i].y) ** 2
-                );
-                if(dist <= currentLevel.planets[i].r){
-                    currentLevel.removeObject(currentLevel.planets[i]);
-                    return;
-                }
-            }
-
-            for(let i = 0; i < currentLevel.numPortals; i++){
-                const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
-    
-                let dist = Math.sqrt(
-                    (mouseWorldX - currentLevel.portals[i].x) ** 2 +
-                    (mouseWorldY - currentLevel.portals[i].y) ** 2
-                );
-
-                if(dist <= currentLevel.portals[i].r){
-                    currentLevel.removeObject(currentLevel.portals[i]);
-                    return;
-                }
-            }
-    
-            for(let i = 0; i < currentLevel.numTools; i++){
-                if(currentLevel.tools[i] != player){
-                    const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                    const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
-    
-                    let dist = Math.sqrt(
-                        (mouseWorldX - currentLevel.tools[i].x) ** 2 +
-                        (mouseWorldY - currentLevel.tools[i].y) ** 2
-                    );
-                    if(dist <= 50){
-                        console.log("eyo");
-                        currentLevel.removeObject(currentLevel.tools[i]);
-                        return;
-                    }
-                }
-            }
-    
-            for(let i = 0; i < currentLevel.numEntities; i++){
-                if(currentLevel.entities[i] != player){
-                    const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                    const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
-    
-                    let dist = Math.sqrt(
-                        (mouseWorldX - currentLevel.entities[i].x) ** 2 +
-                        (mouseWorldY - currentLevel.entities[i].y) ** 2
-                    );
-                    if(dist <= 50){
-                        console.log("eyo");
-                        currentLevel.removeObject(currentLevel.entities[i]);
-                        return;
-                    }
-                }
-            }
-        }
-
-        if(this.adding){
-            let dist = Math.sqrt((eventListener.mouseX - 100) ** 2 + (eventListener.mouseY - 75) ** 2);
+        let dist = Math.sqrt((eventListener.mouseX - 100) ** 2 + (eventListener.mouseY - 75) ** 2);
             if(dist < 50){
                 let planet = new Planet(100, 75, 0, 0, false, 200, 50, "rock", 1, 0.95);
                 currentLevel.addObject(planet);
                 this.editing = planet.id;
                 return;
             }
-        }
-
-        if(this.changingParametres){
-
-            if(this.changingObject >= 1){
-                let object = identificator.getObjectFromId(this.changingObject);
-                switch(object.type){
-                    case "planet":
-                        /*
-                        ctx.beginPath();
-                        ctx.fillStyle = "white";
-                        ctx.fillRect(object.x * scale - 150 - player.x * scale + c.width / 2, object.y * scale - object.r * scale - 170 - player.y * scale + c.height / 2, 300, 150);
-                        ctx.restore();
-                        ctx.closePath();
-                        
-                        ctx.beginPath();
-                        ctx.fillStyle = "red";
-                        ctx.fillRect(object.x * scale - 140 - player.x * scale + c.width / 2 , object.y * scale - object.r * scale - 150 - player.y * scale + c.height / 2, 120 , 5);
-                        ctx.restore();
-                        ctx.closePath();
-
-                        ctx.beginPath();
-                        ctx.fillStyle = "black";
-                        ctx.fillRect(object.x * scale - 140 - player.x * scale + c.width / 2 + object.r / 5, object.y * scale - object.r * scale - 151 - player.y * scale + c.height / 2, 2 , 8);
-                        ctx.restore();
-                        ctx.closePath();*/
-                    if((eventListener.mouseX > object.x * scale - 150 - player.x * scale + c.width / 2) && (eventListener.mouseX < object.x * scale + 150 - player.x * scale + c.width / 2)){
-                        if((eventListener.mouseY > object.y * scale - object.r * scale - 170 - player.y * scale + c.height / 2) && (eventListener.mouseY < object.y * scale - object.r * scale - 20 - player.y * scale + c.height / 2)){
-
-                            if((eventListener.mouseX > object.x * scale - 140 - player.x * scale + c.width / 2) && (eventListener.mouseX < object.x * scale + 100 - player.x * scale + c.width / 2)){
-                                if((eventListener.mouseY > object.y * scale - object.r * scale - 155 - player.y * scale + c.height / 2) && (eventListener.mouseY < object.y * scale - object.r * scale - 145 - player.y * scale + c.height / 2)){
-                                    this.rChanging = true;
-                                    return;
-                                }
-                            }
-                            return;
-                        }
-                    }
-                }
-            }
-
-            for(let i = 0; i < currentLevel.numPlanets; i++){
-                const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
-    
-                let dist = Math.sqrt(
-                    (mouseWorldX - currentLevel.planets[i].x) ** 2 +
-                    (mouseWorldY - currentLevel.planets[i].y) ** 2
-                );
-                if(dist <= currentLevel.planets[i].r){
-                    this.changingObject = currentLevel.planets[i].id;
-                    return;
-                }
-            }
-
-            for(let i = 0; i < currentLevel.numPortals; i++){
-                const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
-    
-                let dist = Math.sqrt(
-                    (mouseWorldX - currentLevel.portals[i].x) ** 2 +
-                    (mouseWorldY - currentLevel.portals[i].y) ** 2
-                );
-
-                if(dist <= currentLevel.portals[i].r){
-                    this.changingObject = currentLevel.portals[i].id;
-                    return;
-                }
-            }
-    
-            for(let i = 0; i < currentLevel.numTools; i++){
-                if(currentLevel.tools[i] != player){
-                    const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                    const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
-    
-                    let dist = Math.sqrt(
-                        (mouseWorldX - currentLevel.tools[i].x) ** 2 +
-                        (mouseWorldY - currentLevel.tools[i].y) ** 2
-                    );
-                    if(dist <= 50){
-                        this.changingObject = currentLevel.tools[i].id;
-                        return;
-                    }
-                }
-            }
-    
-            for(let i = 0; i < currentLevel.numEntities; i++){
-                if(currentLevel.entities[i] != player){
-                    const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
-                    const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
-    
-                    let dist = Math.sqrt(
-                        (mouseWorldX - currentLevel.entities[i].x) ** 2 +
-                        (mouseWorldY - currentLevel.entities[i].y) ** 2
-                    );
-                    if(dist <= 50){
-                        this.changingObject = currentLevel.entities[i].id;
-                        return;
-                    }
-                }
-            }
-            this.changingObject = -1;
-        }
-
-        this.sliding = true;
-        this.mouseStartX = eventListener.mouseX;
-        this.mouseStartY = eventListener.mouseY;
-        this.playerStartX = player.x;
-        this.playerStartY = player.y;
+        this.editing = 0;
     }
 
     leaveObject(){
-        if(this.editing > 0){
-            identificator.getObjectFromId(this.editing).edited = false;
-            this.editing = -1;
-        }
-        else{
-            this.sliding = false;
-            this.zooming = false;
-            this.editing = -1;
-            this.rChanging = false;
-        }
+        this.editing = -1;
     }
 
-    update(eventListener){
+    update(){
+
+        this.drawTools();
+
         if(this.editing > 0){
             identificator.getObjectFromId(this.editing).x = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
             identificator.getObjectFromId(this.editing).y = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
         }
-
-        if(this.sliding){
+        if(this.editing == 0){
             player.x = this.playerStartX - eventListener.mouseX / scale + this.mouseStartX / scale;
             player.y = this.playerStartY - eventListener.mouseY / scale + this.mouseStartY / scale;
         }
+    }
 
-        if(this.zooming){
-            if(eventListener.mouseX < this.zoomToolX - 65){
-                scale = 0.1;
-            }
-            else if(eventListener.mouseX > this.zoomToolX + 65){
-                scale = 2.0;
-            }
-            else{
-                scale = ((eventListener.mouseX - this.zoomToolX + 65) / 60);
+    draw(){
+        ctx.beginPath();
+        ctx.fillStyle = "grey";
+        ctx.fillRect(this.x, this.y, this.width , this.height);
+        ctx.restore();
+        ctx.closePath();
+    }
+
+    drawTools(){
+        //general
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+        ctx.fillRect(0, 0, c.width , 150);
+        ctx.restore();
+        ctx.closePath();
+
+        //planet
+        ctx.beginPath();
+        ctx.fillStyle = "#654321";
+        ctx.arc(100, 75, 50, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.closePath();
+    }
+}
+
+class ObjectEditorTool{
+    constructor(x, y, width, height){
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.editing = -1;
+        this.mouseStartX = 0;
+        this.mouseStartY = 0;
+        this.playerStartX = 0;
+        this.playerStartY = 0;
+        this.rChanging = false;
+        this.shape = "rectangle";
+    }
+
+    editObject(){
+
+        this.mouseStartX = eventListener.mouseX;
+        this.mouseStartY = eventListener.mouseY;
+        this.playerStartX = player.x;
+        this.playerStartY = player.y;
+
+        if(this.editing > 0){
+            if(this.mouseStartX > 0 && this.mouseStartX < 200 && this.mouseStartY > 0 && this.mouseStartY < 100){
+                if(pointInObject(this.mouseStartX, this.mouseStartY, rBar)){
+                    this.rChanging = true;
+                }
+                if(pointInObject(this.mouseStartX, this.mouseStartY, materialsDropDownMenu)){
+
+                    this.materialChanging = !this.materialChanging;
+                    if(this.materialChanging) materialsDropDownMenu.openMenu();
+                    else materialsDropDownMenu.closeMenu();
+                }
+                return;
             }
         }
 
-        if(this.rChanging){
-            let object = identificator.getObjectFromId(this.changingObject);
-            if(eventListener.mouseX < object.x * scale - 140 - player.x * scale + c.width / 2){
-                object.r = 1;
+        for(let i = 0; i < currentLevel.numPlanets; i++){
+            const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+            const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+
+            if(pointInObject(mouseWorldX, mouseWorldY, currentLevel.planets[i])){
+                this.editing = currentLevel.planets[i].id;
+                return;
             }
-            else if(eventListener.mouseX > object.x * scale + 100 - player.x * scale + c.width / 2){
-                object.r = 1000;
+        }
+
+        for(let i = 0; i < currentLevel.numPortals; i++){
+            const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+            const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+
+            if(pointInObject(mouseWorldX, mouseWorldY, currentLevel.portals[i])){
+                this.editing = currentLevel.portals[i].id;
+                return;
             }
-            else{
-                object.r = (eventListener.mouseX - (object.x * scale - 140 - player.x * scale + c.width / 2)) * 5;
+        }
+
+        for(let i = 0; i < currentLevel.numTools; i++){
+            if(currentLevel.tools[i] != player){
+                const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+                const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+
+                let dist = Math.sqrt(
+                    (mouseWorldX - currentLevel.tools[i].x) ** 2 +
+                    (mouseWorldY - currentLevel.tools[i].y) ** 2
+                );
+                if(dist <= 50){
+                    this.editing = currentLevel.tools[i].id;
+                    return;
+                }
             }
+        }
+
+        for(let i = 0; i < currentLevel.numEntities; i++){
+            if(currentLevel.entities[i] != player){
+                const mouseWorldX = eventListener.mouseX / scale + player.x - c.width / (scale * 2);
+                const mouseWorldY = eventListener.mouseY / scale + player.y - c.height / (scale * 2);
+
+                let dist = Math.sqrt(
+                    (mouseWorldX - currentLevel.entities[i].x) ** 2 +
+                    (mouseWorldY - currentLevel.entities[i].y) ** 2
+                );
+                if(dist <= 50){
+                    this.editing = currentLevel.entities[i].id;
+                    return;
+                }
+            }
+        }
+        this.editing = 0;
+    }
+
+    leaveMouse(){
+        if(this.editing == 0) this.editing = -1;
+        this.rChanging = false;
+    }
+
+    update(){
+        if(this.editing > 0){
+            this.drawTools();
+            let object = identificator.getObjectFromId(this.editing);
+            rBar.parameter = object.r;
+            if(this.rChanging){
+                rBar.update();
+                let object = identificator.getObjectFromId(this.editing);
+                object.r = rBar.parameter;
+                object.updateMass();
+            }
+            if(this.materialChanging){
+                materialsDropDownMenu.update();
+            }
+        }
+        if(this.editing == 0 ){
+        player.x = this.playerStartX - eventListener.mouseX / scale + this.mouseStartX / scale;
+        player.y = this.playerStartY - eventListener.mouseY / scale + this.mouseStartY / scale;
         }
     }
 
-    drawEditingTools(){
-        //zoom tool
+    draw(){
         ctx.beginPath();
-        ctx.fillStyle = "white";
-        ctx.fillRect(this.zoomToolX - 60, this.zoomToolY, 120 , 30);
+        ctx.fillStyle = "green";
+        ctx.fillRect(this.x, this.y, this.width , this.height);
+        ctx.restore();
+        ctx.closePath();
+    }
+
+    drawTools(){
+        let object = identificator.getObjectFromId(this.editing);
+        switch(object.type){
+            case "planet": 
+            ctx.beginPath();
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, 200, 100);
+            ctx.restore();
+            ctx.closePath();
+            rBar.draw();
+            materialsDropDownMenu.draw();
+
+            break;
+        }
+    }
+}
+
+class StartPlayingTool{
+    constructor(x, y, width, height){
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.shape = "rectangle";
+    }
+
+    mouseClick(){
+        player.x = fakePlayer.x;
+        player.y = fakePlayer.y;
+        currentLevel.removeObject(fakePlayer);
+        currentLevel.addObject(player);
+        scale = 1;
+        isEditing = false;
+    }
+
+    draw(){
+        ctx.beginPath();
+        ctx.fillStyle = "yellow";
+        ctx.fillRect(this.x , this.y , this.width , this.height);
+        ctx.restore();
+        ctx.closePath();
+    }
+}
+
+//general sliding bar 
+class GeneralSlidingBar{
+    constructor(x, y, width, height, minValue, maxValue){
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.parameter = 1;
+        this.minValue = minValue;
+        this.maxValue = maxValue;
+        this.color1 = "white";
+        this.color2 = "black";
+        this.height2 = 60;
+        this.width2 = 10;
+        this.x2 = this.width * this.parameter / (this.maxValue);
+        this.shape = "rectangle";
+    }
+
+    update(){
+        if(eventListener.mouseX <= this.x){
+            this.parameter = this.minValue;
+        }
+        else if(eventListener.mouseX > this.x + this.width){
+            this.parameter = this.maxValue;
+        }
+        else{
+            this.parameter = (eventListener.mouseX - this.x) * (this.maxValue - this.minValue) / this.width;
+        }
+    }
+
+    draw(){
+
+        this.x2 = this.width * this.parameter / (this.maxValue);
+
+        if(this.parameter == this.minValue){
+            this.x2 = 0;
+        }
+        if(this.parameter == this.maxValue){
+            this.x2 = this.width;
+        }
+        ctx.beginPath();
+        ctx.fillStyle = this.color1;
+        ctx.fillRect(this.x , this.y , this.width , this.height);
         ctx.restore();
         ctx.closePath();
 
         ctx.beginPath();
-        ctx.fillStyle = "black";
-        ctx.fillRect(this.zoomToolX - 65 + 60 * scale, this.zoomToolY - 15, 10 , 60);
+        ctx.fillStyle = this.color2;
+        ctx.fillRect(this.x2 + this.x, this.y - Math.abs(this.height - this.height2) / 2, this.width2 , this.height2);
         ctx.restore();
         ctx.closePath();
+    }
+}
 
-        //creative tools
+//general dropdown menu
+class DropDownMenu{
+    constructor(x, y, width, height, elements){
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.elements = elements;
+        this.open = false;
+        this.shape = "rectangle";
+    }
 
-        //major bar
-        if(this.adding){
-            //general
+    openMenu(){
+        this.open = true;
+    }
+
+    closeMenu(){
+        this.open = false;
+    }
+
+    update(){
+        if(this.open){
+            this.drawDropDown();
+        }
+    }
+
+    draw(){
+        ctx.beginPath();
+        ctx.fillStyle = "brown";
+        ctx.fillRect(this.x , this.y , this.width , this.height);
+        ctx.restore();
+        ctx.closePath();
+    }
+
+    drawDropDown(){
+        for(let i = 0; i < this.elements.length; i++){
             ctx.beginPath();
             ctx.fillStyle = "green";
-            ctx.fillRect(0, 0, c.width , 150);
+            ctx.fillRect(this.x, this.y + this.height + 30 * i, this.width, 30);
             ctx.restore();
             ctx.closePath();
 
-            //planets
             ctx.beginPath();
-            ctx.fillStyle = "brown";
-            ctx.arc(100, 75, 50, 0, 2 * Math.PI);
-            ctx.fill();
+            ctx.font = "16px Arial";
+            ctx.fillStyle = "black";
+            ctx.fillText(this.elements[i], this.x + 10, this.y + this.height + 15 + 30 * i);
+            ctx.restore();
             ctx.closePath();
+
         }
-
-        //moving 
-        ctx.beginPath();
-        ctx.fillStyle = "black";
-        ctx.fillRect(this.majorBarX - 100, this.majorBarY, 50 , 50);
-        ctx.restore();
-        ctx.closePath();
-
-        //change objects
-        ctx.beginPath();
-        ctx.fillStyle = "grey";
-        ctx.fillRect(this.majorBarX - 50, this.majorBarY, 50 , 50);
-        ctx.restore();
-        ctx.closePath();
-
-        //changing object bar
-        if(this.changingParametres && this.changingObject >= 1){
-
-            let object = identificator.getObjectFromId(this.changingObject);
-
-            switch(object.type){
-                case "planet": 
-                //cloud
-                ctx.beginPath();
-                ctx.fillStyle = "white";
-                ctx.fillRect(object.x * scale - 150 - player.x * scale + c.width / 2, object.y * scale - object.r * scale - 170 - player.y * scale + c.height / 2, 300, 150);
-                ctx.restore();
-                ctx.closePath();
-
-                //r operator
-                ctx.beginPath();
-                ctx.fillStyle = "red";
-                ctx.fillRect(object.x * scale - 140 - player.x * scale + c.width / 2 , object.y * scale - object.r * scale - 150 - player.y * scale + c.height / 2, 240 , 5);
-                ctx.restore();
-                ctx.closePath();
-
-                ctx.beginPath();
-                ctx.fillStyle = "black";
-                ctx.fillRect(object.x * scale - 140 - player.x * scale + c.width / 2 + object.r / 5, object.y * scale - object.r * scale - 151 - player.y * scale + c.height / 2, 2 , 8);
-                ctx.restore();
-                ctx.closePath();
-
-                break;
-            }
-        }
-
-        //objects
-        ctx.beginPath();
-        ctx.fillStyle = "darkgrey";
-        ctx.fillRect(this.majorBarX, this.majorBarY, 50 , 50);
-        ctx.restore();
-        ctx.closePath();
-
-        //rubber
-        ctx.beginPath();
-        ctx.fillStyle = "white";
-        ctx.fillRect(this.majorBarX + 50, this.majorBarY, 50 , 50);
-        ctx.restore();
-        ctx.closePath();
-
-        //start playing
-        ctx.beginPath();
-        ctx.fillStyle = "yellow";
-        ctx.fillRect(this.majorBarX + 50, c.height - 100, 100 , 50);
-        ctx.restore();
-        ctx.closePath();
-
-
     }
 }
+
 
 //actions
 const allActions = {
@@ -1624,6 +1825,7 @@ const levels = [
     //home
     new Galaxy(
         [
+            /*
             new Planet(720, 1700, 0, 0, false, 10000, 1000, "rock", 0, 0.90),
 
             new Planet(250, 400, 0, 0, false, 200, 100, "rock", 0, 0.80),
@@ -1664,68 +1866,54 @@ const levels = [
             new Planet(2700, 300, 0, 0, false, 200, 100, "rock", 0, 0.80),
             new Planet(400, 3500, 0, 0, false, 200, 100, "rock", 0, 0.80),
             new Planet(2000, 3200, 0, 0, false, 700, 250, "rock", 0, 0.80)
+            */
         ],
         [
-            new Rock(0, 0, 0, 0, true, 20, 10, "metal", 0, -1)
+            // x, y, vx, vy, gravity, mass, r, material, galaxy, throwBy
+            new Rock(0, 0, 0, 0, true, 10, 10, "rock", 0, -1),
+            new Rock(100, 0, 0, 0, true, 10, 10, "rock", 0, -1),
+            new Rock(200, 0, 0, 0, true, 10, 10, "metal", 0, -1)
         ],
+        //portals
         [
-            new Portal(750, 100, 0, 0, false, 1, 20, "portal", 0, 1, 0, -200),
-            new Portal(750, 600, 0 ,0, false, 1, 20, "portal", 0, 1, 0, -200),
         ],
+        //entities
         [],
+        //tools
         [
-            new Jetpack(700, 700, 0, 0, true, 1, 0, 50, 10)
+            //x, y, vx, vy, gravity, mass, galaxy, tankMax, jetPackTiming
+            new Jetpack(0, 100, 0, 0, true, 1, 0, 50, 30)
         ]
     ),
-    new Galaxy(
-        [
-            new Planet(0, 0, 0, 0, false, 1000, 200, "rock", 1, 0.90),
-            new Planet(-700, 1000, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(-800, 1700, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(-700, 2300, 0, 0, false, 200, 100, "rock", 1, 0.80),
-
-            new Planet(-500, 500, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(-200, 2900, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(300, 3100, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(-200, 700, 0, 0, false, 200, 100, "rock", 1, 0.80),
-
-            new Planet(800, 3100, 0, 0, false, 400, 100, "metal", 1, 0.80),
-            new Planet(300, 3100, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(1200, 3400, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(1900, 400, 0, 0, false, 300, 150, "rock", 1, 0.80),
-            new Planet(2000, 900, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(2100, 1400, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(2500, 900, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(2200, 1800, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(2700, 1300, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(2600, 2000, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(2000, 2200, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(1900, -100, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(2300, 100, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(2700, 300, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(400, 3500, 0, 0, false, 200, 100, "rock", 1, 0.80),
-            new Planet(2000, 3200, 0, 0, false, 700, 250, "rock", 1, 0.80)
-
-        ],
-        [],
-        [
-            new Portal(0, -250, 0, 0, false, 1, 20, "portal", 1, 0, 500, 500),
-        ],
-        [],
-        [
-            new GravitySwitch(0, 0, 0, 0, true, 1, 1, 10),
-        ]
-    )
 ];
 
 eventListener = new EventListener();
-let currentLevel = levels[1];
-let player = new Player(0, 0, 1, 0 , true, 1, 1, 40, 20, 10, 50, 6);
+let currentLevel = levels[0];
+let player = new Player(0, 0, 0, 0 , true, 1, 0, 40, 20, 10, 50, 6);
 let edit = new Edit();
 let fakePlayer = new NPC(0, 0, 0, 0 , true, 1, 1, 40, 20, 10, 50, 6);
 
+let movingTool = new MovingTool(c.width - 100, 50, 50, 50);
+let rubberTool = new RubberTool(c.width - 150, 50, 50, 50);
+let addingTool = new AddingTool(c.width - 200, 50, 50, 50);
+let objectEditorTool = new ObjectEditorTool(c.width - 250, 50, 50, 50);
+let startPlayingTool = new StartPlayingTool(c.width - 150, c.height - 100, 100, 50);
+let zoomingBar = new GeneralSlidingBar(50, c.height - 100, 300, 50, 0.1, 2);
+let rBar = new GeneralSlidingBar(10, 10, 150, 10, 1, 1000);
+const materials = [
+    "rock",
+    "lava",
+    "metal",
+    "gravitanium",
+    "ice"
+];
+let materialsDropDownMenu = new DropDownMenu(10, 30, 150, 10, materials);
+
+rBar.width2 = 5;
+rBar.height2 = 15;
+rBar.color1 = "red";
+
 currentLevel.addObject(player);
-edit.startEditing();
 
 function normalGalaxyPlaying(){
     currentLevel.updateMotion();
@@ -1734,9 +1922,22 @@ function normalGalaxyPlaying(){
 }
 
 function editing(){
-    edit.update(eventListener);
     currentLevel.draw(player);
+    edit.update();
     edit.drawEditingTools();
+}
+
+//point in object
+function pointInObject(x, y, object){
+    switch(object.shape){
+        case "circle":
+            let dist = Math.sqrt((x - object.x) ** 2 + (y - object.y) ** 2);
+            return dist <= object.r;
+        case "rectangle":
+            return x > object.x && x < object.x + object.width && y > object.y && y < object.y + object.height;
+        case "entity":
+            return x >= object.x - object.width / 2 && x <= object.x + object.width / 2 && y <= object.y && y >= object.y - object.height;
+    }
 }
 
 currentLevel.removeObject(player);
